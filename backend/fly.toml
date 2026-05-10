@@ -1,0 +1,25 @@
+# Fly.io config for the belief-tracker backend.
+app = "belief-tracker-jess"
+primary_region = "sjc"
+
+[build]
+
+[env]
+  DB_PATH = "/data/app.db"
+  ALLOWED_ORIGINS = "https://belief-tracker.vercel.app,https://belief-tracker-jessholbrook-gmailcoms-projects.vercel.app,http://localhost:5173"
+  ALLOWED_ORIGIN_REGEX = "https://belief-tracker-.*-jessholbrook-gmailcoms-projects\\.vercel\\.app"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

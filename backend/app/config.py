@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     max_tokens: int = 16384
     db_path: str = "./data/app.db"
     allowed_origins: str = "http://localhost:5173,http://localhost:8080"
+    # Optional regex for matching dynamic origins (e.g. Vercel preview URLs).
+    allowed_origin_regex: str | None = None
     log_level: str = "INFO"
 
     @property

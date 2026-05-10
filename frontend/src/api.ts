@@ -1,7 +1,12 @@
 import type { Belief, Conversation } from "./types";
 
+// In dev: VITE_API_BASE is unset; relative `/api` paths get proxied to
+// localhost:1337 by vite.config.ts. In prod: set VITE_API_BASE to the
+// absolute backend URL (e.g. https://belief-tracker-api.fly.dev).
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}/api${path}`, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
@@ -33,6 +38,12 @@ export const api = {
 };
 
 export function openChatSocket(conversationId: string): WebSocket {
+  if (API_BASE) {
+    // Prod: convert https://x.fly.dev → wss://x.fly.dev
+    const wsBase = API_BASE.replace(/^http/, "ws");
+    return new WebSocket(`${wsBase}/ws/chat/${conversationId}`);
+  }
+  // Dev: vite proxy handles /ws
   const proto = location.protocol === "https:" ? "wss" : "ws";
   return new WebSocket(`${proto}://${location.host}/ws/chat/${conversationId}`);
 }
