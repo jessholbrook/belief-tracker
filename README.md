@@ -1,6 +1,6 @@
 # belief-tracker
 
-A lean Claude-powered agent platform — chat with an autonomous AI that can search the web, run tools, and extract beliefs from text. Inspired by [Copilot Vibes](https://github.com), trimmed to a buildable starting point.
+A lean Claude-powered agent platform — chat with an autonomous AI that can search the web, run tools, and extract beliefs from text. 
 
 ## What it does
 
