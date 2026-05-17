@@ -130,7 +130,7 @@ export default function App() {
         {view === "beliefs" ? (
           <BeliefTracker />
         ) : !activeId ? (
-          <div className="flex h-full items-center justify-center text-stone-500">
+          <div className="flex h-full items-center justify-center text-muted-foreground">
             Pick a conversation or start a new one.
           </div>
         ) : (

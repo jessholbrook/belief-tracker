@@ -39,7 +39,7 @@ Add more in [`backend/app/agent.py`](backend/app/agent.py) — both Anthropic se
 ## Stack
 
 - **Backend** — Python 3.11 · FastAPI · SQLite · Anthropic SDK (`claude-sonnet-4-6`)
-- **Frontend** — React 18 · TypeScript · Vite · Tailwind CSS
+- **Frontend** — React 18 · TypeScript · Vite · Tailwind CSS · shadcn/ui
 - **Real-time** — native WebSocket (FastAPI)
 - **Hosting** — Fly.io (backend, with persistent volume for SQLite) · Vercel (frontend)
 

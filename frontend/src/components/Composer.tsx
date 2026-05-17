@@ -1,4 +1,8 @@
 import { useState, type KeyboardEvent } from "react";
+import { SendHorizonal } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Props {
   disabled?: boolean;
@@ -23,25 +27,24 @@ export function Composer({ disabled, onSend }: Props) {
   }
 
   return (
-    <div className="flex gap-2 border-t border-stone-200 bg-white p-3">
-      <textarea
-        className="flex-1 resize-none rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-stone-500 focus:outline-none"
+    <div className="flex items-end gap-2 border-t bg-card p-3">
+      <Textarea
+        className="flex-1 resize-none bg-background"
         rows={2}
         placeholder={
-          disabled ? "Agent is working..." : "Ask anything (Shift+Enter for newline)"
+          disabled
+            ? "Agent is working…"
+            : "Ask anything (Shift+Enter for newline)"
         }
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={onKeyDown}
         disabled={disabled}
       />
-      <button
-        className="self-end rounded-md bg-stone-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-        onClick={send}
-        disabled={disabled || !value.trim()}
-      >
+      <Button onClick={send} disabled={disabled || !value.trim()}>
+        <SendHorizonal />
         Send
-      </button>
+      </Button>
     </div>
   );
 }
