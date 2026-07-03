@@ -48,5 +48,6 @@ export type AgentEvent =
         is_error?: boolean;
       };
     }
+  | { type: "warning"; task_id: string; data: { message: string } }
   | { type: "task_complete"; task_id: string; data: { final_text: string } }
   | { type: "error"; task_id: string; data: { message: string } };

@@ -13,6 +13,7 @@ def _connect() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(settings.db_path) or ".", exist_ok=True)
     conn = sqlite3.connect(settings.db_path)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
@@ -43,6 +44,7 @@ def init_db() -> None:
                 conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                 role            TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
                 content         TEXT NOT NULL,
+                api_blocks      TEXT,
                 created_at      TEXT NOT NULL
             );
 
@@ -60,6 +62,15 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_beliefs_parent ON beliefs(parent_id);
             """
         )
+        _migrate(c)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive migrations for databases created by older schema versions.
+    Safe to re-run: each step checks before altering."""
+    message_cols = {r[1] for r in conn.execute("PRAGMA table_info(messages)")}
+    if "api_blocks" not in message_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN api_blocks TEXT")
 
 
 def now() -> str:
@@ -102,13 +113,16 @@ def delete_conversation(cid: str) -> None:
         c.execute("DELETE FROM conversations WHERE id = ?", (cid,))
 
 
-def add_message(conversation_id: str, role: str, content: str) -> dict:
+def add_message(
+    conversation_id: str, role: str, content: str, api_blocks: str | None = None
+) -> dict:
     mid = new_id("msg")
     ts = now()
     with cursor() as c:
         c.execute(
-            "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
-            (mid, conversation_id, role, content, ts),
+            "INSERT INTO messages (id, conversation_id, role, content, api_blocks, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (mid, conversation_id, role, content, api_blocks, ts),
         )
         c.execute(
             "UPDATE conversations SET updated_at = ? WHERE id = ?",
@@ -119,8 +133,14 @@ def add_message(conversation_id: str, role: str, content: str) -> dict:
         "conversation_id": conversation_id,
         "role": role,
         "content": content,
+        "api_blocks": api_blocks,
         "created_at": ts,
     }
+
+
+def set_conversation_title(cid: str, title: str) -> None:
+    with cursor() as c:
+        c.execute("UPDATE conversations SET title = ? WHERE id = ?", (title, cid))
 
 
 def list_messages(conversation_id: str) -> list[dict]:
@@ -153,6 +173,12 @@ def insert_belief(
         "evidence": evidence,
         "created_at": ts,
     }
+
+
+def get_belief(bid: str) -> dict | None:
+    with cursor() as c:
+        row = c.execute("SELECT * FROM beliefs WHERE id = ?", (bid,)).fetchone()
+    return dict(row) if row else None
 
 
 def list_beliefs() -> list[dict]:

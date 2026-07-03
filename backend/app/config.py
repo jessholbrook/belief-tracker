@@ -5,6 +5,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     anthropic_api_key: str = ""
+    # Optional shared bearer token. When set, all /api routes (except
+    # /api/health) and the chat WebSocket require it.
+    api_auth_token: str = ""
     model: str = "claude-sonnet-4-6"
     max_tokens: int = 16384
     db_path: str = "./data/app.db"

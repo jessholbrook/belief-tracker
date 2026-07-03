@@ -17,6 +17,11 @@ export default function App() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [busy, setBusy] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  // The socket URL embeds a conversation id; track whose socket we hold so a
+  // reused socket can never deliver a message to the wrong conversation.
+  const wsConvIdRef = useRef<string | null>(null);
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = activeId;
 
   useEffect(() => {
     api.listConversations().then(setConversations);
@@ -34,9 +39,61 @@ export default function App() {
     return () => wsRef.current?.close();
   }, []);
 
+  function finishRun(cid: string) {
+    // Ignore events from sockets we've already replaced (e.g. the close event
+    // fired by deliberately discarding an old conversation's socket).
+    if (wsConvIdRef.current !== cid) return;
+    setBusy(false);
+    // Refresh persisted messages (drops the optimistic placeholder) and the
+    // sidebar (first message auto-titles the conversation) — but only if the
+    // user is still looking at this conversation.
+    if (activeIdRef.current === cid) {
+      api.getConversation(cid).then((c) => {
+        if (activeIdRef.current === cid) setMessages(c.messages ?? []);
+      });
+    }
+    api.listConversations().then(setConversations);
+  }
+
+  /** Return an open socket for `cid`, creating one (with listeners attached
+   * exactly once) if the current socket is missing, closed, or belongs to a
+   * different conversation. */
+  function getSocket(cid: string): WebSocket {
+    if (
+      wsRef.current &&
+      wsConvIdRef.current === cid &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
+      return wsRef.current;
+    }
+    wsRef.current?.close();
+
+    const ws = openChatSocket(cid);
+    wsRef.current = ws;
+    wsConvIdRef.current = cid;
+
+    ws.addEventListener("message", (e) => {
+      let event: AgentEvent;
+      try {
+        event = JSON.parse(e.data) as AgentEvent;
+      } catch {
+        return; // Ignore unparseable messages.
+      }
+      if (wsConvIdRef.current !== cid) return;
+      setEvents((es) => [...es, event]);
+      if (event.type === "task_complete" || event.type === "error") {
+        finishRun(cid);
+      }
+    });
+    ws.addEventListener("close", () => finishRun(cid));
+    ws.addEventListener("error", () => finishRun(cid));
+    return ws;
+  }
+
   async function newChat() {
     const c = await api.createConversation();
-    setConversations([c, ...conversations]);
+    setConversations((cs) => [c, ...cs]);
     setActiveId(c.id);
     setView("chat");
     setMessages([]);
@@ -60,13 +117,14 @@ export default function App() {
 
   function send(text: string) {
     if (!activeId) return;
+    const cid = activeId;
 
     // Optimistically add user message.
     setMessages((ms) => [
       ...ms,
       {
         id: `tmp_${Date.now()}`,
-        conversation_id: activeId,
+        conversation_id: cid,
         role: "user",
         content: text,
         created_at: new Date().toISOString(),
@@ -75,44 +133,13 @@ export default function App() {
     setEvents([]);
     setBusy(true);
 
-    const ws =
-      wsRef.current && wsRef.current.readyState === WebSocket.OPEN
-        ? wsRef.current
-        : openChatSocket(activeId);
-    wsRef.current = ws;
-
-    const cleanup = () => {
-      setBusy(false);
-      // Refresh persisted messages so we drop the optimistic placeholder.
-      if (activeId) {
-        api.getConversation(activeId).then((c) => setMessages(c.messages ?? []));
-      }
-    };
-
-    const handle = (event: AgentEvent) => {
-      setEvents((es) => [...es, event]);
-      if (event.type === "task_complete" || event.type === "error") {
-        cleanup();
-      }
-    };
-
+    const ws = getSocket(cid);
+    const payload = JSON.stringify({ type: "user_message", content: text });
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "user_message", content: text }));
+      ws.send(payload);
     } else {
-      ws.addEventListener("open", () => {
-        ws.send(JSON.stringify({ type: "user_message", content: text }));
-      });
+      ws.addEventListener("open", () => ws.send(payload), { once: true });
     }
-
-    ws.addEventListener("message", (e) => {
-      try {
-        handle(JSON.parse(e.data) as AgentEvent);
-      } catch {
-        // Ignore unparseable messages.
-      }
-    });
-    ws.addEventListener("close", cleanup);
-    ws.addEventListener("error", cleanup);
   }
 
   return (
@@ -136,9 +163,11 @@ export default function App() {
         ) : (
           <div className="flex h-full flex-col">
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              {messages.map((m) => (
-                <MessageView key={m.id} message={m} />
-              ))}
+              {messages
+                .filter((m) => m.content)
+                .map((m) => (
+                  <MessageView key={m.id} message={m} />
+                ))}
               <TaskView events={events} />
             </div>
             <Composer disabled={busy} onSend={send} />

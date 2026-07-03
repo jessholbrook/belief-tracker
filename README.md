@@ -31,7 +31,7 @@ The Beliefs view turns a paste-bin of text into a tree of explicit, weighted cla
 |---|---|
 | `web_search` | Anthropic-hosted server-side tool |
 | `web_fetch` | Anthropic-hosted server-side tool |
-| `calculate` | Local — sandboxed `eval` over the `math` module |
+| `calculate` | Local — AST-whitelist arithmetic evaluator (`math` module) |
 | `current_datetime` | Local |
 
 Add more in [`backend/app/agent.py`](backend/app/agent.py) — both Anthropic server-side tools and locally-executed custom tools work in the same loop.
@@ -105,7 +105,18 @@ The backend reads CORS config from env:
 - `ALLOWED_ORIGINS` — comma-separated list of exact origins
 - `ALLOWED_ORIGIN_REGEX` — optional regex for matching dynamic origins (e.g. Vercel preview URLs)
 
-Both are set in `fly.toml`'s `[env]` block for the deployed instance.
+Both are set in `fly.toml`'s `[env]` block for the deployed instance. The same
+origin rules are enforced on the chat WebSocket (CORS itself does not cover
+WebSockets).
+
+### Auth (recommended for public deployments)
+
+Set `API_AUTH_TOKEN` on the backend (e.g. `flyctl secrets set API_AUTH_TOKEN=...`)
+and bake the same value into the frontend build as `VITE_API_TOKEN`. All
+`/api` routes (except `/api/health`) then require `Authorization: Bearer <token>`,
+and the WebSocket requires it as a `?token=` query param. Leave it unset for
+local dev. This is a shared-secret gate against drive-by API-key burning — not
+multi-user auth; the token is visible to anyone you share the frontend with.
 
 ## Project layout
 
@@ -154,13 +165,24 @@ def execute_custom_tool(name, tool_input):
 
 This is a starting point, not a clone of the original. The following are TODOs:
 
-- Authentication / multi-user
+- Multi-user accounts (a single shared `API_AUTH_TOKEN` gate is built in)
 - File uploads + document generation (pptx/docx/xlsx)
 - Playwright server-side browser automation
 - Chrome extension for client-side browser control
 - Recurring/scheduled tasks
 - SMS notifications
 - Sharing / public links
+
+## Tests
+
+```bash
+cd backend
+./venv/bin/python -m pytest          # 34 tests: agent loop, calculate sandbox, DB migrations, API auth
+cd ../frontend
+npm run build                        # typechecks (tsc) + production build
+```
+
+Both run in CI on every push and PR (`.github/workflows/ci.yml`).
 
 ## Cost estimates
 

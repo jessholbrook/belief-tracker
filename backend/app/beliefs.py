@@ -1,9 +1,12 @@
-"""Belief extraction: ask Claude to pull structured beliefs from text."""
+"""Belief extraction: ask Claude to pull structured beliefs from text.
+
+Uses a forced tool call so the API guarantees schema-valid output — no
+JSON-in-prose parsing or code-fence stripping needed.
+"""
 
 from __future__ import annotations
 
 import asyncio
-import json
 
 import anthropic
 
@@ -11,20 +14,44 @@ from . import db
 from .config import settings
 
 
-EXTRACTION_PROMPT = """Extract the speaker's beliefs and assumptions from the text below.
+EXTRACTION_PROMPT = """Extract the speaker's beliefs and assumptions from the text below, \
+then record them with the record_beliefs tool.
 
-For each belief, return:
+For each belief provide:
 - statement: a short, declarative sentence stating the belief
 - confidence: "high", "medium", or "low" — how strongly the speaker holds it
 - evidence: a brief quote or paraphrase from the text that supports it
 
-Return STRICTLY valid JSON of the form:
-{"beliefs": [{"statement": "...", "confidence": "...", "evidence": "..."}]}
-
-Be concise. Skip filler. If there are no clear beliefs, return {"beliefs": []}.
+Be concise. Skip filler. If there are no clear beliefs, record an empty list.
 
 TEXT:
 """
+
+RECORD_BELIEFS_TOOL = {
+    "name": "record_beliefs",
+    "description": "Record the beliefs extracted from the text.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "beliefs": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "statement": {"type": "string"},
+                        "confidence": {
+                            "type": "string",
+                            "enum": ["high", "medium", "low"],
+                        },
+                        "evidence": {"type": "string"},
+                    },
+                    "required": ["statement", "confidence"],
+                },
+            }
+        },
+        "required": ["beliefs"],
+    },
+}
 
 
 def _client() -> anthropic.Anthropic:
@@ -39,25 +66,16 @@ async def extract_beliefs(text: str, parent_id: str | None = None) -> list[dict]
         client.messages.create,
         model=settings.model,
         max_tokens=2048,
+        tools=[RECORD_BELIEFS_TOOL],
+        tool_choice={"type": "tool", "name": "record_beliefs"},
         messages=[{"role": "user", "content": EXTRACTION_PROMPT + text}],
     )
 
-    raw = next(
-        (b.text for b in response.content if getattr(b, "type", None) == "text"),
-        "",
+    tool_use = next(
+        (b for b in response.content if getattr(b, "type", None) == "tool_use"),
+        None,
     )
-    raw = raw.strip()
-    # Strip optional code fences.
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-        if raw.endswith("```"):
-            raw = raw[:-3]
-        raw = raw.strip()
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return []
+    parsed = tool_use.input if tool_use else {}
 
     saved: list[dict] = []
     for b in parsed.get("beliefs", []):

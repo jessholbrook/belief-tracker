@@ -4,6 +4,7 @@ import {
   CircleAlert,
   CornerDownRight,
   Globe,
+  TriangleAlert,
   Wrench,
 } from "lucide-react";
 
@@ -65,6 +66,12 @@ function EventRow({ event }: { event: AgentEvent }) {
         >
           <CornerDownRight className="mt-0.5 size-3.5 shrink-0" />
           <span>{truncate(event.data.content, 240)}</span>
+        </div>
+      );
+    case "warning":
+      return (
+        <div className="flex items-center gap-1.5 text-amber-600">
+          <TriangleAlert className="size-3.5" /> {event.data.message}
         </div>
       );
     case "task_complete":

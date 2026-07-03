@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { CornerDownRight, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ export function BeliefTracker() {
   const [beliefs, setBeliefs] = useState<Belief[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  // When set, extracted beliefs become children of this belief.
+  const [parent, setParent] = useState<Belief | null>(null);
 
   async function refresh() {
     setBeliefs(await api.listBeliefs());
@@ -27,8 +29,9 @@ export function BeliefTracker() {
     if (!text.trim() || loading) return;
     setLoading(true);
     try {
-      await api.extractBeliefs(text);
+      await api.extractBeliefs(text, parent?.id);
       setText("");
+      setParent(null);
       await refresh();
     } finally {
       setLoading(false);
@@ -37,6 +40,7 @@ export function BeliefTracker() {
 
   async function remove(id: string) {
     await api.deleteBelief(id);
+    if (parent?.id === id) setParent(null);
     await refresh();
   }
 
@@ -58,7 +62,12 @@ export function BeliefTracker() {
           ) : (
             <ul className="space-y-2">
               {beliefs.map((b) => (
-                <BeliefNode key={b.id} belief={b} onDelete={remove} />
+                <BeliefNode
+                  key={b.id}
+                  belief={b}
+                  onDelete={remove}
+                  onExtractUnder={setParent}
+                />
               ))}
             </ul>
           )}
@@ -66,6 +75,21 @@ export function BeliefTracker() {
       </ScrollArea>
       <Separator />
       <div className="bg-card p-4">
+        {parent && (
+          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <CornerDownRight className="size-3.5 shrink-0" />
+            <span className="truncate">
+              Extracting sub-beliefs under: <em>{parent.statement}</em>
+            </span>
+            <button
+              className="hover:text-foreground"
+              onClick={() => setParent(null)}
+              aria-label="Clear parent belief"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
         <Textarea
           className="bg-background"
           rows={4}
@@ -75,7 +99,7 @@ export function BeliefTracker() {
         />
         <div className="mt-2 flex justify-end">
           <Button onClick={extract} disabled={loading || !text.trim()}>
-            {loading ? "Extracting…" : "Extract beliefs"}
+            {loading ? "Extracting…" : parent ? "Extract sub-beliefs" : "Extract beliefs"}
           </Button>
         </div>
       </div>
@@ -95,9 +119,11 @@ const confidenceVariant: Record<
 function BeliefNode({
   belief,
   onDelete,
+  onExtractUnder,
 }: {
   belief: Belief;
   onDelete: (id: string) => void;
+  onExtractUnder: (belief: Belief) => void;
 }) {
   return (
     <li>
@@ -116,6 +142,14 @@ function BeliefNode({
           </div>
           <button
             className="text-muted-foreground hover:text-foreground"
+            onClick={() => onExtractUnder(belief)}
+            title="Extract sub-beliefs under this"
+            aria-label="Extract sub-beliefs under this belief"
+          >
+            <CornerDownRight className="size-4" />
+          </button>
+          <button
+            className="text-muted-foreground hover:text-foreground"
             onClick={() => onDelete(belief.id)}
             aria-label="Delete belief"
           >
@@ -125,7 +159,12 @@ function BeliefNode({
         {belief.children.length > 0 && (
           <ul className="ml-4 mt-2 space-y-2 border-l pl-3">
             {belief.children.map((c) => (
-              <BeliefNode key={c.id} belief={c} onDelete={onDelete} />
+              <BeliefNode
+                key={c.id}
+                belief={c}
+                onDelete={onDelete}
+                onExtractUnder={onExtractUnder}
+              />
             ))}
           </ul>
         )}

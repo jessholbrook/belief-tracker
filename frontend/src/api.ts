@@ -4,10 +4,15 @@ import type { Belief, Conversation } from "./types";
 // localhost:1337 by vite.config.ts. In prod: set VITE_API_BASE to the
 // absolute backend URL (e.g. https://belief-tracker-api.fly.dev).
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+// Optional shared token; must match the backend's API_AUTH_TOKEN.
+const API_TOKEN = import.meta.env.VITE_API_TOKEN ?? "";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}/api${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
+    },
     ...init,
   });
   if (!res.ok) {
@@ -38,12 +43,15 @@ export const api = {
 };
 
 export function openChatSocket(conversationId: string): WebSocket {
+  const query = API_TOKEN ? `?token=${encodeURIComponent(API_TOKEN)}` : "";
   if (API_BASE) {
     // Prod: convert https://x.fly.dev → wss://x.fly.dev
     const wsBase = API_BASE.replace(/^http/, "ws");
-    return new WebSocket(`${wsBase}/ws/chat/${conversationId}`);
+    return new WebSocket(`${wsBase}/ws/chat/${conversationId}${query}`);
   }
   // Dev: vite proxy handles /ws
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  return new WebSocket(`${proto}://${location.host}/ws/chat/${conversationId}`);
+  return new WebSocket(
+    `${proto}://${location.host}/ws/chat/${conversationId}${query}`,
+  );
 }
